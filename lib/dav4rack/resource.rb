@@ -1,5 +1,6 @@
 require 'uuidtools'
 require 'dav4rack/http_status'
+require 'active_model/callbacks'
 
 module DAV4Rack
   
@@ -34,11 +35,8 @@ module DAV4Rack
     # NOTE: Customized Resources should not use initialize for setup. Instead
     #       use the #setup method
     def initialize(public_path, path, request, response, options)
-      @skip_alias = [:authenticate, :authentication_error_msg, :authentication_realm, :path, :options, :public_path, :request, :response, :user, :user=]
-      @public_path = public_path.dup
-      @path = path.dup
-      @request = request
-      @response = response
+      @public_path, @path = public_path.dup, path.dup
+      @request, @response = request, response
       unless(options.has_key?(:lock_class))
         require 'dav4rack/lock_store'
         @lock_class = LockStore
@@ -51,11 +49,6 @@ module DAV4Rack
       @default_timeout = options[:default_timeout] || 60
       @user = @options[:user] || request.ip
       setup if respond_to?(:setup)
-      public_methods(false).each do |method|
-        next if @skip_alias.include?(method.to_sym) || method[0,4] == 'DAV_' || method[0,5] == '_DAV_'
-        self.class.class_eval "alias :'_DAV_#{method}' :'#{method}'"
-        self.class.class_eval "undef :'#{method}'"
-      end
     end
     
     # If this is a collection, return the child resources.
@@ -328,6 +321,34 @@ module DAV4Rack
         list.concat(child.descendants)
       end
       list
+    end
+    
+    extend ActiveModel::Callbacks
+    METHODS =  [:get, :put, :post, :delete, :make_collection, :copy, :move, :lock_check, :lock, :unlock, 
+        :property_names, :get_property, :set_property].freeze 
+      # :children, :descendants, :exist?, :collection?, (? authenticate)
+      # :etag, :content_type, :content_length, :last_modified, :path, :public_path
+    METHODS.each do |method|
+      define_model_callbacks method
+      class_eval <<-OVERRIDE, __FILE__, __LINE__ + 1
+        def #{method}_with_callbacks(*args)
+          _run_#{method}_callbacks do
+            #{method}_without_callbacks(*args)
+          end
+        end
+      OVERRIDE
+      alias_method_chain method, :callbacks
+    end
+
+    def self.inherited(subclass)
+      def subclass.method_added(method)
+        @@prevent_recursion ||= {}
+        if METHODS.include?(method) && @@prevent_recursion[method].nil?
+          @@prevent_recursion[method] = true
+          alias_method :"#{method}_without_callbacks", method
+          alias_method method, :"#{method}_with_callbacks"
+        end
+      end
     end
     
     protected
