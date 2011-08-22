@@ -1,5 +1,6 @@
 require 'uuidtools'
 require 'dav4rack/http_status'
+require 'active_model/callbacks'
 
 module DAV4Rack
   
@@ -18,35 +19,6 @@ module DAV4Rack
   class Resource
     attr_reader :path, :options, :public_path, :request, :response
     attr_accessor :user
-    @@blocks = {}
-    
-    class << self
-      
-      # This lets us define a bunch of before and after blocks that are
-      # either called before all methods on the resource, or only specific
-      # methods on the resource
-      def method_missing(*args, &block)
-        class_sym = self.name.to_sym
-        @@blocks[class_sym] ||= {:before => {}, :after => {}}
-        m = args.shift
-        parts = m.to_s.split('_')
-        type = parts.shift.to_s.to_sym
-        method = parts.empty? ? nil : parts.join('_').to_sym
-        if(@@blocks[class_sym][type] && block_given?)
-          if(method)
-            @@blocks[class_sym][type][method] ||= []
-            @@blocks[class_sym][type][method] << block
-          else
-            @@blocks[class_sym][type][:'__all__'] ||= []
-            @@blocks[class_sym][type][:'__all__'] << block
-          end
-        else
-          raise NoMethodError.new("Undefined method #{m} for class #{self}")
-        end
-      end
-      
-    end
-    
     include DAV4Rack::HTTPStatus
     
     # public_path:: Path received via request
@@ -85,34 +57,6 @@ module DAV4Rack
       @default_timeout = options[:default_timeout] || 60
       @user = @options[:user] || request.ip
       setup if respond_to?(:setup)
-      public_methods(false).each do |method|
-        next if @skip_alias.include?(method.to_sym) || method[0,4] == 'DAV_' || method[0,5] == '_DAV_'
-        self.class.class_eval "alias :'_DAV_#{method}' :'#{method}'"
-        self.class.class_eval "undef :'#{method}'"
-      end
-      @runner = lambda do |class_sym, kind, method_name|
-        [:'__all__', method_name.to_sym].each do |sym|
-          if(@@blocks[class_sym] && @@blocks[class_sym][kind] && @@blocks[class_sym][kind][sym])
-            @@blocks[class_sym][kind][sym].each do |b|
-              args = [self, sym == :'__all__' ? method_name : nil].compact
-              b.call(*args)
-            end
-          end
-        end
-      end
-    end
-    
-    # This allows us to call before and after blocks
-    def method_missing(*args)
-      result = nil
-      orig = args.shift
-      class_sym = self.class.name.to_sym
-      m = orig.to_s[0,5] == '_DAV_' ? orig : "_DAV_#{orig}" # If hell is doing the same thing over and over and expecting a different result this is a hell preventer
-      raise NoMethodError.new("Undefined method: #{orig} for class #{self}.") unless respond_to?(m)
-      @runner.call(class_sym, :before, orig)
-      result = send m, *args
-      @runner.call(class_sym, :after, orig)
-      result
     end
     
     # If this is a collection, return the child resources.
@@ -385,6 +329,34 @@ module DAV4Rack
         list.concat(child.descendants)
       end
       list
+    end
+    
+    extend ActiveModel::Callbacks
+    METHODS =  [:get, :put, :post, :delete, :make_collection, :copy, :move, :lock_check, :lock, :unlock, 
+        :property_names, :get_property, :set_property].freeze 
+      # :children, :descendants, :exist?, :collection?, (? authenticate)
+      # :etag, :content_type, :content_length, :last_modified, :path, :public_path
+    METHODS.each do |method|
+      define_model_callbacks method
+      class_eval <<-OVERRIDE, __FILE__, __LINE__ + 1
+        def #{method}_with_callbacks(*args)
+          _run_#{method}_callbacks do
+            #{method}_without_callbacks(*args)
+          end
+        end
+      OVERRIDE
+      alias_method_chain method, :callbacks
+    end
+
+    def self.inherited(subclass)
+      def subclass.method_added(method)
+        @@prevent_recursion ||= {}
+        if METHODS.include?(method) && @@prevent_recursion[method].nil?
+          @@prevent_recursion[method] = true
+          alias_method :"#{method}_without_callbacks", method
+          alias_method method, :"#{method}_with_callbacks"
+        end
+      end
     end
     
     protected
