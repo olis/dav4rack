@@ -39,6 +39,9 @@ module DAV4Rack
       response["Allow"] = 'OPTIONS,HEAD,GET,PUT,POST,DELETE,PROPFIND,PROPPATCH,MKCOL,COPY,MOVE,LOCK,UNLOCK'
       response["Dav"] = "1, 2"
       response["Ms-Author-Via"] = "DAV"
+      if resource.protocol == 'CARDDAV'
+       response["Dav"] += ", addressbook" 
+      end
       OK
     end
     

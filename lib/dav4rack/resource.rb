@@ -115,6 +115,11 @@ module DAV4Rack
       result
     end
     
+    # Which protocoll is suported, by this resource (WEBDAV, CARDDAV OR CALDAV)?
+    def protocol
+      'WEBDAV'
+    end
+  
     # If this is a collection, return the child resources.
     def children
       NotImplemented
