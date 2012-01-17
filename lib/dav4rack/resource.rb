@@ -48,7 +48,7 @@ module DAV4Rack
     end
     
     include DAV4Rack::HTTPStatus
-    
+  
     # public_path:: Path received via request
     # path:: Internal resource path (Only different from public path when using root_uri's for webdav)
     # request:: Rack::Request
