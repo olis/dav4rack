@@ -117,7 +117,7 @@ module DAV4Rack
     
     # Which protocoll is suported, by this resource (WEBDAV, CARDDAV OR CALDAV)?
     def protocol
-      'WEBDAV'
+      'webdav'
     end
   
     # If this is a collection, return the child resources.
@@ -403,6 +403,7 @@ module DAV4Rack
     # Return list of descendants
     def descendants
       list = []
+      #debugger
       children.each do |child|
         list << child
         list.concat(child.descendants)

@@ -24,7 +24,7 @@ module DAV4Rack
         
         controller = nil
         begin
-          controller = Controller.new(request, response, @options.dup)
+          controller = Controller.create(request, response, @options.dup)
           controller.authenticate
           res = controller.send(request.request_method.downcase)
           response.status = res.code if res.respond_to?(:code)
@@ -53,7 +53,8 @@ module DAV4Rack
         
         response.body.is_a?(Rack::File) ? response.body.call(env) : response.finish
       rescue Exception => e
-        Logger.error "WebDAV Error: #{e}\n#{e.backtrace.join("\n")}"
+        #Logger.error "WebDAV Error: #{e}\n#{e.backtrace.join("\n")}"
+        Rails.logger.error "WebDAV Error: #{e}\n#{e.backtrace.join("\n")}"
         raise e
       end
     end

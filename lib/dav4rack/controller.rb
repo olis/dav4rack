@@ -4,6 +4,15 @@ module DAV4Rack
     include DAV4Rack::HTTPStatus
     
     attr_reader :request, :response, :resource
+    
+    def self.create(request, response, options={})
+    case options[:resource_class].protocol
+      when 'webdav'
+        WebdavController.new(request, response, options)
+      when 'carddav'
+        CarddavController.new(request, response, options)
+      end
+    end
 
     # request:: Rack::Request
     # response:: Rack::Response
@@ -39,9 +48,6 @@ module DAV4Rack
       response["Allow"] = 'OPTIONS,HEAD,GET,PUT,POST,DELETE,PROPFIND,PROPPATCH,MKCOL,COPY,MOVE,LOCK,UNLOCK'
       response["Dav"] = "1, 2"
       response["Ms-Author-Via"] = "DAV"
-      if resource.protocol == 'carddav'
-       response["Dav"] += ", addressbook"
-      end
       OK
     end
     
