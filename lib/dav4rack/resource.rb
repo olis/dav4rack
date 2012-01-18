@@ -20,6 +20,16 @@ module DAV4Rack
     attr_accessor :user
     @@blocks = {}
     
+    PROPERTIES = {
+      'creationdate'      => 'D',
+      'displayname'       => 'D',
+      'getlastmodified'   => 'D',
+      'getetag'           => 'D',
+      'resourcetype'      => 'D',
+      'getcontenttype'    => 'D',
+      'getcontentlength'  => 'D'
+    }
+    
     class << self
       
       # This lets us define a bunch of before and after blocks that are
@@ -343,7 +353,11 @@ module DAV4Rack
     
     # Available properties
     def property_names
-      %w(creationdate displayname getlastmodified getetag resourcetype getcontenttype getcontentlength)
+      PROPERTIES.keys
+    end
+    
+    def get_namespace_for(name)
+      PROPERTIES[name]
     end
     
     # name:: String - Property name
@@ -403,7 +417,6 @@ module DAV4Rack
     # Return list of descendants
     def descendants
       list = []
-      #debugger
       children.each do |child|
         list << child
         list.concat(child.descendants)

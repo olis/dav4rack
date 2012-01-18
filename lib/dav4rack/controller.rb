@@ -444,8 +444,9 @@ module DAV4Rack
       stats = Hash.new { |h, k| h[k] = [] }
       for name in names
         begin
+          ns = resource.get_namespace_for(name)
           val = resource.get_property(name)
-          stats[OK].push [name, val]
+          stats[OK].push [name, val, ns]
         rescue Unauthorized => u
           raise u
         rescue Status
@@ -480,17 +481,17 @@ module DAV4Rack
       for status, props in stats
         xml.propstat do
           xml.prop do
-            for name, value in props
+            for name, value, ns in props
               if(value.is_a?(Nokogiri::XML::Node))
-                xml.send(name) do
+                xml[ns].send(name) do
                   xml_convert(xml, value)
                 end
               elsif(value.is_a?(Symbol))
-                xml.send(name) do
+                xml[ns].send(name) do
                   xml.send(value)
                 end
               else
-                xml.send(name, value)
+                xml[ns].send(name, value)
               end
             end
           end
