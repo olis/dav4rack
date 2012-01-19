@@ -490,6 +490,18 @@ module DAV4Rack
                 xml[ns].send(name) do
                   xml.send(value)
                 end
+              elsif(value.is_a?(Array))
+                xml[ns].send(name) do
+                  value.each do |v|
+                    xml.send(v)
+                  end
+                end
+              elsif(value.is_a?(Hash))
+                xml[ns].send(name) do
+                  value.each do |v, n|
+                    xml[n].send(v)
+                  end
+                end
               else
                 xml[ns].send(name, value)
               end
