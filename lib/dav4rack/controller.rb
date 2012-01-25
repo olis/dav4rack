@@ -162,20 +162,35 @@ module DAV4Rack
     
     # Return respoonse to PROPFIND
     def propfind
+      if resource.collection? && depth == :infinity
+        render_xml :error do |xml|
+          xml.send('propfind-finite-depth')
+        end
+        return Forbidden
+      end
       unless(resource.exist?)
         NotFound
       else
-        unless(request_document.xpath("//#{ns}propfind/#{ns}allprop").empty?)
-          names = resource.property_names
+        allprop = request_document.xpath("//#{ns}propfind/#{ns}allprop").any?
+        propname = request_document.xpath("//#{ns}propfind/#{ns}propname").any?
+        return Forbidden if allprop && propname
+        if(request_document.xpath("//#{ns}propfind/#{ns}allprop").any?)
+          props = get_properties(resource, resource.property_names)
+        elsif(request_document.xpath("//#{ns}propfind/#{ns}propname").any?)
+          props = get_property_names(resource, resource.property_names)
         else
           names = request_document.xpath("//#{ns}propfind/#{ns}prop").children.find_all{|n|n.element?}.map{|n|n.name}
-          names = resource.property_names if names.empty?
+          if names.empty?
+            return NotFound if request_document.xpath("//#{ns}propfind").children.any?
+            names = resource.property_names
+          end
+          props = get_properties(resource, names)
         end
         multistatus do |xml|
           find_resources.each do |resource|
             xml.response do
               xml.href "#{scheme}://#{host}:#{port}#{url_escape(resource.public_path)}"
-              propstats(xml, get_properties(resource, names))
+              propstats(xml, props)
             end
           end
         end
@@ -455,6 +470,21 @@ module DAV4Rack
       end
       stats
     end
+    
+    def get_property_names(resource, names)
+      stats = Hash.new { |h, k| h[k] = [] }
+      for name in names
+        begin
+          ns = resource.get_namespace_for(name)
+          stats[OK].push({name => ns})
+        rescue Unauthorized => u
+          raise u
+        rescue Status
+          stats[$!] << name
+        end
+      end
+      stats
+    end
 
     # resource:: Resource
     # pairs:: name value pairs
@@ -481,29 +511,36 @@ module DAV4Rack
       for status, props in stats
         xml.propstat do
           xml.prop do
-            for name, value, ns in props
-              if(value.is_a?(Nokogiri::XML::Node))
-                xml[ns].send(name) do
-                  xml_convert(xml, value)
-                end
-              elsif(value.is_a?(Symbol))
-                xml[ns].send(name) do
-                  xml.send(value)
-                end
-              elsif(value.is_a?(Array))
-                xml[ns].send(name) do
-                  value.each do |v|
-                    xml.send(v)
+            for prop in props
+              if prop.is_a?(Array)
+                name, value, ns = prop
+                if(value.is_a?(Nokogiri::XML::Node))
+                  xml[ns].send(name) do
+                    xml_convert(xml, value)
                   end
-                end
-              elsif(value.is_a?(Hash))
-                xml[ns].send(name) do
-                  value.each do |v, n|
-                    xml[n].send(v)
+                elsif(value.is_a?(Symbol))
+                  xml[ns].send(name) do
+                    xml.send(value)
                   end
+                elsif(value.is_a?(Array))
+                  xml[ns].send(name) do
+                    value.each do |v|
+                      xml.send(v)
+                    end
+                  end
+                elsif(value.is_a?(Hash))
+                  xml[ns].send(name) do
+                    value.each do |v, n|
+                      xml[n].send(v)
+                    end
+                  end
+                else
+                  xml[ns].send(name, value)
                 end
-              else
-                xml[ns].send(name, value)
+              elsif prop.is_a?(Hash)
+                prop.each do |v, n|
+                  xml[n].send(v)
+                end
               end
             end
           end
