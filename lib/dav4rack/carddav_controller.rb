@@ -10,6 +10,10 @@ module DAV4Rack
       OK
     end
     
+    def report
+      MultiStatus
+    end
+    
     def render_xml(root_type)
       raise ArgumentError.new 'Expecting block' unless block_given?
       doc = Nokogiri::XML::Builder.new do |xml_base|

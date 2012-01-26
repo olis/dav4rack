@@ -378,7 +378,7 @@ module DAV4Rack
 
     # Find resources at depth requested
     def find_resources(with_current_resource=true)
-      ary = nil
+      ary = []
       case depth
       when 0
         ary = []
